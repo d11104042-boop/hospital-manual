@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- 防止搜尋引擎索引與抓取 -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <title>臨床護理工作手冊與病房分層目錄系統</title>
+  
+  <!-- Firebase Web SDK (v10 compat 版本，支援單一 HTML 檔案) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --primary-color: #d86979; /* 暖粉紅主色 */
+      --primary-dark: #b84a5a;
+      --primary-light: #fce8eb;
+      --accent-color: #f4a261;
+      --bg-color: #fff8f5;     /* 柔和蜜桃奶油底色 */
+      --sidebar-width: 320px;
+    }
+
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      -webkit-tap-highlight-color: transparent; 
+    }
+    
+    body { 
+      font-family: "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      background-color: var(--bg-color); 
+      /* 可愛溫馨背景圖騰：柔和點點紋理 */
+      background-image: 
+        radial-gradient(#f7d0d6 1.5px, transparent 1.5px), 
+        radial-gradient(#f7d0d6 1.5px, var(--bg-color) 1.5px);
+      background-size: 40px 40px;
+      background-position: 0 0, 20px 20px;
+      color: #4a3e3d; 
+      display: flex; 
+      height: 100vh; 
+      height: 100dvh; 
+      overflow: hidden; 
+    }
+
+    /* 行動裝置側邊欄遮罩層 */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(74, 62, 61, 0.35);
+      backdrop-filter: blur(2px);
+      z-index: 998;
+    }
+
+    /* 邊欄目錄 Navigation */
+    #sidebar { 
+      width: var(--sidebar-width); 
+      background: #ffffff; 
+      border-right: 2px solid #f2e2df; 
+      display: flex; 
+      flex-direction: column; 
+      z-index: 999;
+      transition: transform 0.3s ease-in-out;
+      box-shadow: 4px 0 15px rgba(216, 105, 121, 0.08);
+    }
+
+    .sidebar-header { 
+      padding: 16px; 
+      background: linear-gradient(135deg, #e87a90, var(--primary-color)); 
+      color: white; 
+      font-weight: bold; 
+      font-size: 1.15em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      box-shadow: 0 4px 10px rgba(216, 105, 121, 0.2);
+    }
+
+    .search-box { 
+      padding: 12px; 
+      border-bottom: 1px solid #fce8eb; 
+      background: #fffcfb; 
+    }
+
+    .search-box input { 
+      width: 100%; 
+      padding: 10px 14px; 
+      border: 1.5px solid #f7d0d6; 
+      border-radius: 20px; 
+      font-size: 0.95em; 
+      outline: none; 
+      background: #ffffff; 
+      color: #4a3e3d; 
+    }
+
+    .search-box input:focus { 
+      border-color: var(--primary-color); 
+    }
+    
+    .nav-tree { 
+      flex: 1; 
+      overflow-y: auto; 
+      padding: 12px; 
+      -webkit-overflow-scrolling: touch; 
+    }
+
+    /* 資料夾樹狀階層樣式 */
+    details { margin-bottom: 8px; }
+
+    summary { 
+      font-weight: bold; 
+      cursor: pointer; 
+      padding: 9px 12px; 
+      border-radius: 10px; 
+      user-select: none; 
+      transition: background 0.2s; 
+      outline: none; 
+    }
+
+    summary:hover, summary:active { background: var(--primary-light); }
+    
+    .folder-fav > summary { 
+      color: #d81b60; 
+      font-size: 1.05em; 
+      border-bottom: 2px dashed #f48fb1; 
+      margin-top: 4px; 
+      background: #fff0f5; 
+    }
+
+    .folder-main > summary { 
+      color: var(--primary-dark); 
+      font-size: 1.05em; 
+      border-bottom: 2px solid #f7d0d6; 
+      margin-top: 8px; 
+    }
+
+    .folder-sub { margin-left: 10px; }
+    .folder-sub > summary { color: #e07a5f; font-size: 0.95em; }
+
+    .file-item { 
+      padding: 10px 12px; 
+      margin-left: 18px; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      font-size: 0.92em; 
+      color: #5a4b4a; 
+      transition: 0.2s; 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      border-left: 3px solid #f7d0d6; 
+      margin-top: 5px; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      background: #fffcfb; 
+    }
+
+    .file-item:hover, .file-item.active { 
+      background: var(--primary-color); 
+      color: white; 
+      border-left: 4px solid var(--primary-dark); 
+      font-weight: bold; 
+      box-shadow: 0 2px 8px rgba(216, 105, 121, 0.3); 
+    }
+
+    /* 主內容區 Main Content */
+    #main-content { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      overflow: hidden; 
+      background: transparent; 
+      position: relative; 
+    }
+
+    .top-bar { 
+      height: 60px; 
+      background: rgba(255, 255, 255, 0.9); 
+      backdrop-filter: blur(8px); 
+      border-bottom: 1.5px solid #fce8eb; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      padding: 0 18px; 
+      gap: 10px; 
+    }
+
+    .top-left { 
+      display: flex; 
+      align-items: center; 
+      gap: 10px; 
+      overflow: hidden; 
+    }
+
+    .status-badge { 
+      font-size: 0.8em; 
+      padding: 5px 12px; 
+      border-radius: 15px; 
+      background: #f0e6e4; 
+      color: #776563; 
+      white-space: nowrap; 
+    }
+
+    .status-badge.admin { 
+      background: #e8f5e9; 
+      color: #2e7d32; 
+      font-weight: bold; 
+    }
+
+    .cloud-badge { 
+      font-size: 0.75em; 
+      padding: 4px 8px; 
+      border-radius: 8px; 
+      background: #e3f2fd; 
+      color: #1565c0; 
+      font-weight: bold; 
+    }
+
+    .btn { 
+      padding: 9px 14px; 
+      border: none; 
+      border-radius: 20px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      font-size: 0.88em; 
+      transition: 0.2s; 
+      white-space: nowrap; 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: center; 
+      gap: 5px; 
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06); 
+    }
+
+    .btn-primary { background: var(--primary-color); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-danger { background: #f4511e; color: white; }
+    .btn-success { background: #43a047; color: white; font-size: 0.92em; }
+    .btn-success:hover { background: #2e7d32; }
+    .btn-fav { background: #fff8e1; color: #f57f17; border: 1px solid #ffe082; }
+    .btn-fav.active { background: #ffecb3; color: #e65100; font-weight: bold; }
+    .menu-toggle-btn { display: none; background: #fce8eb; color: var(--primary-dark); }
+
+    .content-body { flex: 1; overflow-y: auto; padding: 20px; -webkit-overflow-scrolling: touch; }
+    
+    /* 溫馨白底圓角卡片 */
+    .article-card { 
+      background: #ffffff; 
+      padding: 28px; 
+      border-radius: 18px; 
+      box-shadow: 0 8px 24px rgba(216, 105, 121, 0.08); 
+      max-width: 920px; 
+      margin: 0 auto; 
+      border: 1px solid #fdeef0;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* 嬰兒小腳印浮水印圖案 */
+    .article-card::after {
+      content: "👶🍼✨";
+      position: absolute;
+      bottom: -15px;
+      right: 15px;
+      font-size: 4.5em;
+      opacity: 0.06;
+      pointer-events: none;
+    }
+
+    .article-header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: flex-start; 
+      margin-bottom: 15px; 
+      gap: 10px; 
+      border-bottom: 2px dashed #fce8eb; 
+      padding-bottom: 12px; 
+    }
+
+    .article-title { 
+      font-size: 1.5em; 
+      color: #3a2e2d; 
+      word-break: break-word; 
+      flex: 1; 
+      font-weight: bold; 
+    }
+
+    .article-path { 
+      font-size: 0.82em; 
+      color: var(--primary-color); 
+      font-weight: bold; 
+      margin-bottom: 12px; 
+      display: inline-block; 
+      background: var(--primary-light); 
+      padding: 5px 12px; 
+      border-radius: 12px; 
+    }
+
+    .article-text { 
+      line-height: 1.85; 
+      color: #4a3e3d; 
+      font-size: 1.02em; 
+      word-break: break-word; 
+    }
+
+    .article-text p { margin-bottom: 10px; }
+
+    /* 編輯模式 Form */
+    #edit-form { display: none; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 8px; font-size: 0.92em; color: #5a4b4a; }
+    .form-group input, .form-group select { width: 100%; padding: 11px; border: 1.5px solid #f7d0d6; border-radius: 10px; font-size: 1em; outline: none; background: #fffcfb; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--primary-color); }
+    
+    /* 富文本編輯框 (支援 Word 複製貼上與格式保留) */
+    .editor-container {
+      min-height: 300px;
+      max-height: 550px;
+      overflow-y: auto;
+      border: 1.5px solid #f7d0d6;
+      border-radius: 10px;
+      padding: 14px;
+      background: #ffffff;
+      font-size: 1em;
+      line-height: 1.6;
+      outline: none;
+    }
+
+    .editor-container:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(216, 105, 121, 0.15);
+    }
+
+    .editor-container:empty:before {
+      content: attr(data-placeholder);
+      color: #bfaea9;
+    }
+    
+    .editor-toolbar { 
+      display: flex; 
+      gap: 6px; 
+      flex-wrap: wrap; 
+      margin-bottom: 8px; 
+      background: #fff5f6; 
+      padding: 8px; 
+      border-radius: 10px; 
+      border: 1px solid #fce8eb; 
+    }
+
+    .tool-btn { 
+      padding: 6px 12px; 
+      font-size: 0.85em; 
+      border-radius: 6px; 
+      border: 1px solid #f7d0d6; 
+      background: white; 
+      cursor: pointer; 
+      font-weight: bold; 
+      color: #5a4b4a; 
+    }
+
+    .tool-btn:hover { background: var(--primary-light); }
+
+    /* Modal 管理員登入彈窗 */
+    .modal-overlay { 
+      position: fixed; 
+      top:0; left:0; width:100%; height:100%; 
+      background: rgba(74, 62, 61, 0.4); 
+      backdrop-filter: blur(3px); 
+      display:none; 
+      justify-content:center; 
+      align-items:center; 
+      z-index: 1000; 
+      padding: 15px; 
+    }
+
+    .modal-box { 
+      background: white; 
+      padding: 28px; 
+      border-radius: 18px; 
+      width: 100%; 
+      max-width: 420px; 
+      text-align: center; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+      border: 1px solid #fdeef0; 
+    }
+
+    @media (max-width: 768px) {
+      .menu-toggle-btn { display: inline-flex; }
+      #sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 85%; max-width: 310px; transform: translateX(-100%); }
+      #sidebar.active { transform: translateX(0); }
+      .sidebar-overlay.active { display: block; }
+      .content-body { padding: 12px; }
+      .article-card { padding: 18px; border-radius: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- 側邊目錄欄 -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <span>👶 臨床護理工作手冊</span>
+      <button class="btn" style="background:transparent; color:white; font-size:1.2em; box-shadow:none;" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="🔍 搜尋照護指引/技術/檢查..." oninput="filterArticles()">
+    </div>
+    <div class="nav-tree" id="navTree"></div>
+  </div>
+
+  <!-- 主工作視窗 -->
+  <div id="main-content">
+    <div class="top-bar">
+      <div class="top-left">
+        <button class="btn menu-toggle-btn" onclick="toggleSidebar(true)">☰ 目錄</button>
+        <span id="userStatus" class="status-badge">👁 唯讀模式</span>
+        <span id="cloudStatus" class="cloud-badge">☁️ 雲端與本機同步中</span>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button id="addBtn" class="btn btn-success" style="display:none;" onclick="showAddForm()">➕ 新增文章</button>
+        <button id="adminBtn" class="btn btn-primary" onclick="toggleAdminModal()">🔒 管理員登入</button>
+      </div>
+    </div>
+
+    <div class="content-body">
+      <!-- 內容閱讀檢視區 -->
+      <div id="article-view" class="article-card">
+        <span id="viewPath" class="article-path">📁 資料庫</span>
+        <div class="article-header">
+          <h1 id="viewTitle" class="article-title">讀取中...</h1>
+          <button id="favBtn" class="btn btn-fav" style="display:none;" onclick="toggleCurrentFavorite()">
+            <span id="favIcon">☆</span> <span id="favText">收藏</span>
+          </button>
+        </div>
+        <div id="viewText" class="article-text">正在讀取資料，請稍候...</div>
+        
+        <div id="adminActions" style="margin-top:22px; display:none; border-top:2px dashed #fce8eb; padding-top:16px;">
+          <button class="btn btn-primary" onclick="showEditForm()">✏️ 編輯本文</button>
+          <button class="btn btn-danger" style="margin-left:8px;" onclick="deleteCurrentArticle()">🗑️ 刪除本文</button>
+        </div>
+      </div>
+
+      <!-- 內容新增/編輯表單 -->
+      <div id="edit-form" class="article-card">
+        <h2 id="formHeaderTitle" style="margin-bottom:18px; color:var(--primary-dark);">➕ 新增文章</h2>
+        
+        <div class="form-group">
+          <label>主資料夾（單位分類）</label>
+          <select id="editMainCat" onchange="updateSubCatOptions()">
+            <option value="病房">病房</option>
+            <option value="嬰兒室">嬰兒室</option>
+            <option value="新生兒加護病房 (NICU)">新生兒加護病房 (NICU)</option>
+            <option value="產房">產房</option>
+            <option value="門診檢查">門診檢查</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>子資料夾（分類標籤，可自由輸入）</label>
+          <input type="text" id="editSubCat" list="subCatList" placeholder="例如：常規、檢查、照護技術、衛教">
+          <datalist id="subCatList"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label>文章標題</label>
+          <input type="text" id="editTitle" placeholder="請輸入標題名稱">
+        </div>
+
+        <div class="form-group">
+          <label>文章內容（支援直接貼上 Word 文件，自動保留顏色與字體）</label>
+          <div class="editor-toolbar">
+            <button type="button" class="tool-btn" style="background:#fff59d;" onclick="execCmd('hiliteColor', '#fff59d')">🟡 黃螢光</button>
+            <button type="button" class="tool-btn" style="background:#a5d6a7;" onclick="execCmd('hiliteColor', '#a5d6a7')">🟢 綠螢光</button>
+            <button type="button" class="tool-btn" style="color:#e53935;" onclick="execCmd('foreColor', '#e53935')">🔴 紅字</button>
+            <button type="button" class="tool-btn" style="color:#1e88e5;" onclick="execCmd('foreColor', '#1e88e5')">🔵 藍字</button>
+            <button type="button" class="tool-btn" onclick="execCmd('bold')"><b>粗體 B</b></button>
+            <button type="button" class="tool-btn" onclick="execCmd('underline')"><u>底線 U</u></button>
+            <button type="button" class="tool-btn" onclick="execCmd('removeFormat')">🧹 清除格式</button>
+          </div>
+          <div id="editText" class="editor-container" contenteditable="true" data-placeholder="可在此輸入內容，或直接複製貼上 Word 文件（字體、顏色、表格與劃記皆可自動保留同步）..."></div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-top:20px;">
+          <button class="btn btn-success" style="flex:2; padding:12px; font-size:1em;" onclick="saveArticle()">💾 儲存（雙重備份）</button>
+          <button class="btn" style="background:#9e8e8c; color:white; flex:1;" onclick="cancelEdit()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 管理員登入視窗 Modal -->
+  <div id="login-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="margin-bottom:15px; color:var(--primary-dark);">🔒 管理員驗證</h3>
+      <!-- 提示文字與預設值均隱藏密碼，確保公用電腦安全 -->
+      <input type="password" id="adminPasswordInput" placeholder="請輸入管理員密碼" style="width:100%; padding:11px; margin-bottom:15px; border:1.5px solid #f7d0d6; border-radius:10px; outline:none;">
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="verifyAdminPassword()">驗證登入</button>
+        <button class="btn" style="background:#9e8e8c; color:white; flex:1;" onclick="toggleAdminModal()">取消</button>
+      </div>
+      <p id="loginErrorMsg" style="color:#d32f2f; font-size:0.85em; margin-top:10px;"></p>
+    </div>
+  </div>
+
+<script>
+  // ==========================================
+  // 請將下方步驟取得的 Firebase 配置填入此處
+  // ==========================================
+  const firebaseConfig = {
+  apiKey: "AIzaSyBXM9dW9xH-74dax3KJL9hQUJP7NYCofDw",
+  authDomain: "hospital-manual.firebaseapp.com",
+  databaseURL: "https://hospital-manual-default-rtdb.firebaseio.com",
+  projectId: "hospital-manual",
+  storageBucket: "hospital-manual.firebasestorage.app",
+  messagingSenderId: "519518026110",
+  appId: "1:519518026110:web:16eba951199edb7bbbdb2f",
+  measurementId: "G-RFNL9Z3T6E"
+  };
+
+  // 初始化 Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  const ADMIN_PASSWORD = "admin"; //預設管理密碼
+  let isAdmin = false;
+  let currentArticleId = null;
+  let articlesList = [];
+
+  function execCmd(command, value = null) {
+    document.execCommand(command, false, value);
+    document.getElementById("editText").focus();
+  }
+
+  // 1. 本地 LocalStorage 快取備份機制（確保離線時資料也不遺失）
+  function loadLocalBackup() {
+    try {
+      const data = localStorage.getItem("hospital_articles_backup_v1");
+      return data ? JSON.parse(data) : [];
+    } catch(e) { return []; }
+  }
+
+  function saveLocalBackup(list) {
+    try { localStorage.setItem("hospital_articles_backup_v1", JSON.stringify(list)); } catch(e){}
+  }
+
+  // 2. 實時監聽 Firebase 雲端資料庫 (Firestore)
+  function listenToFirebase() {
+    // 開啟時先載入本地備份防止畫面空白
+    articlesList = loadLocalBackup();
+    refreshDisplay();
+
+    db.collection("articles").onSnapshot(snapshot => {
+      const cloudList = [];
+      snapshot.forEach(doc => cloudList.push(doc.data()));
+      
+      if (cloudList.length > 0 || snapshot.empty) {
+        articlesList = cloudList;
+        saveLocalBackup(articlesList); // 同步回本地
+        document.getElementById("cloudStatus").innerText = "☁️ 雲端同步成功";
+        document.getElementById("cloudStatus").style.background = "#e3f2fd";
+        document.getElementById("cloudStatus").style.color = "#1565c0";
+      }
+      refreshDisplay();
+    }, error => {
+      console.warn("Firebase 讀取受阻，目前運作於本地備份模式：", error);
+      document.getElementById("cloudStatus").innerText = "💾 本地備份模式";
+      document.getElementById("cloudStatus").style.background = "#fff3e0";
+      document.getElementById("cloudStatus").style.color = "#e65100";
+    });
+  }
+
+  function refreshDisplay() {
+    renderNav(document.getElementById("searchInput").value.trim());
+
+    // 資料庫為空白時顯示說明訊息（完全無測試文章）
+    if (articlesList.length === 0) {
+      currentArticleId = null;
+      document.getElementById("viewTitle").innerText = "👶 歡迎使用臨床工作手冊";
+      document.getElementById("viewPath").innerText = "📁 資料庫為空";
+      document.getElementById("viewText").innerHTML = "目前資料庫中尚無任何文章。<br><br>👉 請點選右上角 <b>「🔒 管理員登入」</b>，驗證身分後即可點選 <b>「➕ 新增文章」</b> 開始建立手冊內容！";
+      document.getElementById("favBtn").style.display = "none";
+      document.getElementById("adminActions").style.display = "none";
+      return;
+    }
+
+    if (currentArticleId) {
+      const found = articlesList.find(a => a.id === currentArticleId);
+      if (found) selectArticle(found.id);
+      else selectArticle(articlesList[0].id);
+    } else {
+      selectArticle(articlesList[0].id);
+    }
+  }
+
+  function getFavorites() {
+    try {
+      const data = localStorage.getItem("hospital_favorites_v6");
+      return data ? JSON.parse(data) : [];
+    } catch(e) { return []; }
+  }
+
+  function toggleCurrentFavorite() {
+    if (!currentArticleId) return;
+    let favs = getFavorites();
+    if (favs.includes(currentArticleId)) {
+      favs = favs.filter(id => id !== currentArticleId);
+    } else {
+      favs.push(currentArticleId);
+    }
+    try { localStorage.setItem("hospital_favorites_v6", JSON.stringify(favs)); } catch(e){}
+    updateFavButtonUI();
+    renderNav(document.getElementById("searchInput").value.trim());
+  }
+
+  function updateFavButtonUI() {
+    if (!currentArticleId) {
+      document.getElementById("favBtn").style.display = "none";
+      return;
+    }
+    document.getElementById("favBtn").style.display = "inline-flex";
+    const isFav = getFavorites().includes(currentArticleId);
+    const btn = document.getElementById("favBtn");
+    btn.className = isFav ? "btn btn-fav active" : "btn btn-fav";
+    document.getElementById("favIcon").innerText = isFav ? "⭐" : "☆";
+    document.getElementById("favText").innerText = isFav ? "已收藏" : "收藏";
+  }
+
+  function toggleSidebar(show) {
+    document.getElementById("sidebar").classList.toggle("active", show);
+    document.getElementById("sidebarOverlay").classList.toggle("active", show);
+  }
+
+  function updateSubCatOptions() {
+    const mainCat = document.getElementById("editMainCat").value;
+    const existingSubCats = articlesList.filter(a => a.mainCategory === mainCat).map(a => a.subCategory || "常規");
+    const defaultMap = {
+      "病房": ["常規", "檢查", "技術", "飲食"],
+      "嬰兒室": ["常規", "照護指引"],
+      "新生兒加護病房 (NICU)": ["常規", "技術"],
+      "產房": ["待產照護", "產後照護"],
+      "門診檢查": ["檢查流程", "衛教"]
+    };
+    const combined = [...new Set([...(defaultMap[mainCat] || []), ...existingSubCats])];
+    const datalist = document.getElementById("subCatList");
+    datalist.innerHTML = "";
+    combined.forEach(sc => {
+      const opt = document.createElement("option");
+      opt.value = sc;
+      datalist.appendChild(opt);
+    });
+  }
+
+  // 渲染多層級樹狀選單
+  function renderNav(filterKeyword = "") {
+    const favs = getFavorites();
+    const navTree = document.getElementById("navTree");
+    navTree.innerHTML = "";
+
+    if (articlesList.length === 0) {
+      navTree.innerHTML = `<div style="padding:15px; color:#a08e8c; font-size:0.9em; text-align:center;">（資料庫目前無任何內容）</div>`;
+      return;
+    }
+
+    // 1. ⭐ 個人最愛區塊
+    const favArticles = articlesList.filter(a => favs.includes(a.id) && (
+      a.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
+      a.text.toLowerCase().includes(filterKeyword.toLowerCase())
+    ));
+
+    if (favArticles.length > 0) {
+      const favDetails = document.createElement("details");
+      favDetails.className = "folder-fav";
+      favDetails.open = true;
+      favDetails.innerHTML = `<summary>⭐ 我的最愛 (${favArticles.length})</summary>`;
+      favArticles.forEach(art => {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = `file-item ${currentArticleId === art.id ? 'active' : ''}`;
+        fileDiv.innerHTML = `<span>📄 ${art.title}</span> <span style="font-size:0.8em; opacity:0.75;">[${art.mainCategory}]</span>`;
+        fileDiv.onclick = (e) => { e.stopPropagation(); selectArticle(art.id); };
+        favDetails.appendChild(fileDiv);
+      });
+      navTree.appendChild(favDetails);
+    }
+
+    // 2. 主分類架構：病房、嬰兒室、新生兒加護病房 (NICU)、產房、門診檢查
+    const mainCats = ["病房", "嬰兒室", "新生兒加護病房 (NICU)", "產房", "門診檢查"];
+    mainCats.forEach(mainCat => {
+      const mainArticles = articlesList.filter(a => a.mainCategory === mainCat && (
+        a.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
+        a.text.toLowerCase().includes(filterKeyword.toLowerCase())
+      ));
+
+      if (mainArticles.length === 0) return;
+
+      const mainDetails = document.createElement("details");
+      mainDetails.className = "folder-main";
+      mainDetails.open = true;
+      mainDetails.innerHTML = `<summary>📂 ${mainCat}</summary>`;
+
+      const subCats = [...new Set(mainArticles.map(a => a.subCategory || "一般常規"))];
+
+      subCats.forEach(subCat => {
+        const subArticles = mainArticles.filter(a => (a.subCategory || "一般常規") === subCat);
+        const subDetails = document.createElement("details");
+        subDetails.className = "folder-sub";
+        subDetails.open = true;
+        subDetails.innerHTML = `<summary>📁 ${subCat} (${subArticles.length})</summary>`;
+
+        subArticles.forEach(art => {
+          const isFav = favs.includes(art.id);
+          const fileDiv = document.createElement("div");
+          fileDiv.className = `file-item ${currentArticleId === art.id ? 'active' : ''}`;
+          fileDiv.innerHTML = `<span>📄 ${art.title}</span>${isFav ? '<span style="color:#f57f17;">⭐</span>' : ''}`;
+          fileDiv.onclick = (e) => { e.stopPropagation(); selectArticle(art.id); };
+          subDetails.appendChild(fileDiv);
+        });
+        mainDetails.appendChild(subDetails);
+      });
+      navTree.appendChild(mainDetails);
+    });
+  }
+
+  function selectArticle(id) {
+    currentArticleId = id;
+    const article = articlesList.find(a => a.id === id);
+    if (!article) return;
+
+    document.getElementById("viewPath").innerText = `📂 ${article.mainCategory} ➔ 📁 ${article.subCategory || '一般常規'}`;
+    document.getElementById("viewTitle").innerText = article.title;
+    document.getElementById("viewText").innerHTML = article.text;
+
+    updateFavButtonUI();
+    document.getElementById("adminActions").style.display = isAdmin ? "block" : "none";
+    document.getElementById("article-view").style.display = "block";
+    document.getElementById("edit-form").style.display = "none";
+
+    renderNav(document.getElementById("searchInput").value.trim());
+    if (window.innerWidth <= 768) toggleSidebar(false);
+  }
+
+  function toggleAdminModal() {
+    if (isAdmin) {
+      isAdmin = false;
+      document.getElementById("userStatus").innerText = "👁️ 唯讀模式";
+      document.getElementById("userStatus").className = "status-badge";
+      document.getElementById("adminBtn").innerText = "🔒 管理員登入";
+      document.getElementById("addBtn").style.display = "none";
+      document.getElementById("adminActions").style.display = "none";
+    } else {
+      document.getElementById("login-modal").style.display = "flex";
+    }
+  }
+
+  function verifyAdminPassword() {
+    if (document.getElementById("adminPasswordInput").value === ADMIN_PASSWORD) {
+      isAdmin = true;
+      document.getElementById("login-modal").style.display = "none";
+      document.getElementById("adminPasswordInput").value = "";
+      document.getElementById("loginErrorMsg").innerText = "";
+      document.getElementById("userStatus").innerText = "⚡ 管理員身份";
+      document.getElementById("userStatus").className = "status-badge admin";
+      document.getElementById("adminBtn").innerText = "🚪 登出";
+      document.getElementById("addBtn").style.display = "inline-flex";
+      if (currentArticleId) document.getElementById("adminActions").style.display = "block";
+    } else {
+      document.getElementById("loginErrorMsg").innerText = "密碼驗證失敗，請重新輸入！";
+    }
+  }
+
+  function showAddForm() {
+    currentArticleId = null;
+    document.getElementById("formHeaderTitle").innerText = "➕ 新增文章 (雙重備份存檔)";
+    document.getElementById("editMainCat").value = "病房";
+    updateSubCatOptions();
+    document.getElementById("editSubCat").value = "";
+    document.getElementById("editTitle").value = "";
+    document.getElementById("editText").innerHTML = "";
+    document.getElementById("favBtn").style.display = "none";
+    document.getElementById("article-view").style.display = "none";
+    document.getElementById("edit-form").style.display = "block";
+    if (window.innerWidth <= 768) toggleSidebar(false);
+  }
+
+  function showEditForm() {
+    const article = articlesList.find(a => a.id === currentArticleId);
+    if (!article) return;
+    document.getElementById("formHeaderTitle").innerText = "✏️ 編輯文章 (更新存檔)";
+    document.getElementById("editMainCat").value = article.mainCategory;
+    updateSubCatOptions();
+    document.getElementById("editSubCat").value = article.subCategory || "常規";
+    document.getElementById("editTitle").value = article.title;
+    document.getElementById("editText").innerHTML = article.text || "";
+    document.getElementById("article-view").style.display = "none";
+    document.getElementById("edit-form").style.display = "block";
+  }
+
+  // 雙重存檔機制：同步存入瀏覽器快取 (LocalStorage) 與 Firestore 雲端
+  async function saveArticle() {
+    const mainCategory = document.getElementById("editMainCat").value;
+    const subCategory = document.getElementById("editSubCat").value.trim() || "一般常規";
+    const title = document.getElementById("editTitle").value.trim();
+    const text = document.getElementById("editText").innerHTML.trim();
+
+    if (!title || !text || text === "<br>") {
+      alert("⚠️ 請填寫標題與文章內容後再進行存檔！");
+      return;
+    }
+
+    const docId = currentArticleId ? currentArticleId : "art_" + Date.now();
+    const articleData = { id: docId, mainCategory, subCategory, title, text };
+
+    // 1. 本地即時備份（確保重開網頁資料絕不遺失）
+    const index = articlesList.findIndex(a => a.id === docId);
+    if (index >= 0) articlesList[index] = articleData;
+    else articlesList.push(articleData);
+    saveLocalBackup(articlesList);
+
+    // 2. 雲端同步寫入
+    try {
+      await db.collection("articles").doc(docId).set(articleData);
+      alert("🎉 存檔成功！已保留 Word 格式並寫入本地快取與 Firebase 雲端。");
+    } catch (error) {
+      console.error("雲端存檔失敗，但已保留於本地快取：", error);
+      alert("⚠️ 本地已備份成功！若雲端寫入失敗，請確認 Firebase 資料庫規則設定。");
+    }
+
+    currentArticleId = docId;
+    refreshDisplay();
+  }
+
+  function cancelEdit() {
+    if (currentArticleId) {
+      selectArticle(currentArticleId);
+    } else {
+      document.getElementById("article-view").style.display = "block";
+      document.getElementById("edit-form").style.display = "none";
+      refreshDisplay();
+    }
+  }
+
+  async function deleteCurrentArticle() {
+    if (!confirm("確定要將這篇文章永久刪除嗎？")) return;
+    
+    // 刪除本地備份
+    articlesList = articlesList.filter(a => a.id !== currentArticleId);
+    saveLocalBackup(articlesList);
+
+    // 刪除雲端文件
+    try {
+      await db.collection("articles").doc(currentArticleId).delete();
+    } catch (e) {
+      console.warn("雲端刪除失敗，已同步從本地移除", e);
+    }
+
+    currentArticleId = null;
+    alert("🗑 文章已成功刪除！");
+    refreshDisplay();
+  }
+
+  function filterArticles() {
+    renderNav(document.getElementById("searchInput").value.trim());
+  }
+
+  window.onload = function() {
+    listenToFirebase();
+  };
+</script>
+</body>
+</html>
