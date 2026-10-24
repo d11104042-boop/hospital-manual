@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
   <title>臨床護理工作手冊與病房分層目錄系統</title>
   
-  <!-- Firebase SDK -->
+  <!-- Firebase SDK 穩定載入 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
@@ -23,7 +23,7 @@
     html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
 
     body { 
-      font-family: "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      font-family: "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif; 
       background-color: var(--bg-color); 
       background-image: radial-gradient(#f7d0d6 1.5px, transparent 1.5px), radial-gradient(#f7d0d6 1.5px, var(--bg-color) 1.5px);
       background-size: 40px 40px;
@@ -87,45 +87,10 @@
     .content-body { flex: 1; overflow-y: auto; padding: 20px; }
     .article-card { background: #ffffff; padding: 28px; border-radius: 18px; box-shadow: 0 8px 24px rgba(216, 105, 121, 0.08); max-width: 920px; margin: 0 auto; border: 1px solid #fdeef0; }
     .article-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; gap: 10px; border-bottom: 2px dashed #fce8eb; padding-bottom: 12px; }
-    .article-title { font-size: 1.5em; color: #3a2e2d; flex: 1; font-weight: bold; word-break: break-word; }
+    .article-title { font-size: 1.5em; color: #3a2e2d; flex: 1; font-weight: bold; }
     .article-path { font-size: 0.82em; color: var(--primary-color); font-weight: bold; margin-bottom: 12px; display: inline-block; background: var(--primary-light); padding: 5px 12px; border-radius: 12px; }
-
-    /* 全局文字自動換行與防跑版保護 */
-    .article-text, .editor-container { 
-      line-height: 1.85; 
-      color: #4a3e3d; 
-      font-size: 1.02em; 
-      word-break: break-word;
-      overflow-wrap: break-word;
-    }
-
-    /* 手機端 Word 表格強效適應與橫向滾動 */
-    .article-text table, .editor-container table {
-      display: block !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      overflow-x: auto !important;
-      -webkit-overflow-scrolling: touch;
-      border-collapse: collapse !important;
-      margin: 14px 0 !important;
-    }
-
-    .article-text td, .article-text th,
-    .editor-container td, .editor-container th {
-      min-width: 80px;
-      word-break: break-word !important;
-      overflow-wrap: break-word !important;
-      padding: 8px 10px !important;
-      border: 1px solid #f7d0d6 !important;
-      font-size: 0.95em;
-    }
-
-    .article-text tr:nth-child(even),
-    .editor-container tr:nth-child(even) {
-      background-color: #fff9fa;
-    }
-
-    img, video, iframe { max-width: 100% !important; height: auto !important; border-radius: 8px; margin: 10px 0; display: block; }
+    .article-text { line-height: 1.85; color: #4a3e3d; font-size: 1.02em; }
+    img, video, iframe { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
 
     #edit-form { display: none; }
     .form-group { margin-bottom: 18px; }
@@ -144,9 +109,8 @@
       #sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 85%; max-width: 310px; transform: translateX(-100%); transition: transform 0.3s; }
       #sidebar.active { transform: translateX(0); }
       .sidebar-overlay.active { display: block; }
-      .content-body { padding: 10px; }
-      .article-card { padding: 16px; border-radius: 14px; }
-      .article-title { font-size: 1.25em; }
+      .content-body { padding: 12px; }
+      .article-card { padding: 18px; }
     }
   </style>
 </head>
@@ -200,14 +164,13 @@
         
         <div class="form-group">
           <label>主資料夾（單位分類）</label>
-          <input type="text" id="editMainCat" list="mainCatList" placeholder="可選擇或直接輸入（例如：病房、嬰兒室、急診）" onchange="updateSubCatOptions()">
-          <datalist id="mainCatList">
-            <option value="病房"></option>
-            <option value="嬰兒室"></option>
-            <option value="新生兒加護病房 (NICU)"></option>
-            <option value="產房"></option>
-            <option value="門診檢查"></option>
-          </datalist>
+          <select id="editMainCat" onchange="updateSubCatOptions()">
+            <option value="病房">病房</option>
+            <option value="嬰兒室">嬰兒室</option>
+            <option value="新生兒加護病房 (NICU)">新生兒加護病房 (NICU)</option>
+            <option value="產房">產房</option>
+            <option value="門診檢查">門診檢查</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -270,31 +233,13 @@
       appId: "1:519518026110:web:16eba951199edb7bbbdb2f"
     };
 
-    // 預設內建常規文章範本
-    const DEFAULT_ARTICLES = [
-      {
-        id: "art_default_1",
-        mainCategory: "病房",
-        subCategory: "常規",
-        title: "病房入住照護與衛教常規",
-        text: "<h3>【病房入住常規指南】</h3><p>1. 確認病人身分與手圈資料。</p><p>2. 量測 Vital Signs (BP, HR, RR, Temp, SpO2)。</p><p>3. 進行環境介紹（呼叫鈴、病床升降、衛浴設施）。</p><p>4. 完成入院護理評估紀錄與衛教。</p>"
-      },
-      {
-        id: "art_default_2",
-        mainCategory: "嬰兒室",
-        subCategory: "照護指引",
-        title: "新生兒生命徵象量測與照護常規",
-        text: "<h3>【新生兒照護指引】</h3><p>1. 體溫量測：採用腋溫（目標 36.5°C ~ 37.5°C）。</p><p>2. 呼吸觀察：正常新生兒呼吸約 40~60 次/分。</p><p>3. 臍帶照護：每日 75% 酒精消毒，保持乾爽。</p><p>4. 黃疸觀察：每日記錄皮膚黃疸指數。</p>"
-      }
-    ];
-
     let db = null;
     const ADMIN_PASSWORD = "admin";
     let isAdmin = false;
     let currentArticleId = null;
     let articlesList = [];
 
-    // 高度壓縮照片（寬度限制 500px，品質 0.4 JPEG，單張僅 30~50KB）
+    // 高度壓縮照片（寬度限制 500px，品質 0.4 JPEG，單張僅 30~50KB，避免 Firebase 1MB 限制）
     function compressAndInsertImage(file) {
       const reader = new FileReader();
       reader.onload = function(evt) {
@@ -355,16 +300,15 @@
     function loadLocalBackup() {
       try {
         const data = localStorage.getItem("hospital_articles_backup_v1");
-        const list = data ? JSON.parse(data) : [];
-        return (list && list.length > 0) ? list : DEFAULT_ARTICLES;
-      } catch(e) { return DEFAULT_ARTICLES; }
+        return data ? JSON.parse(data) : [];
+      } catch(e) { return []; }
     }
 
     function saveLocalBackup(list) {
       try { localStorage.setItem("hospital_articles_backup_v1", JSON.stringify(list)); } catch(e){}
     }
 
-    // 初始化：立即讀取本機快取出畫面
+    // 初始化：立即讀取本機快取出畫面，完全不需要等網絡！
     window.addEventListener("DOMContentLoaded", () => {
       articlesList = loadLocalBackup();
       refreshDisplay();
@@ -383,56 +327,49 @@
       }
 
       // 連線 Firebase 雲端
-      if (typeof firebase !== 'undefined') {
-        try {
-          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-          db = firebase.firestore();
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
 
-          db.collection("articles").onSnapshot(snapshot => {
-            const cloudList = [];
-            snapshot.forEach(doc => {
-              // 關鍵要點：強制將 Firestore 文件的 doc.id 合併進物件，防止文件缺乏 id 欄位造成卡死
-              cloudList.push({ id: doc.id, ...doc.data() });
-            });
-            
-            if (cloudList.length > 0) {
-              articlesList = cloudList;
-              saveLocalBackup(articlesList);
-              document.getElementById("cloudStatus").innerText = `☁️ 雲端同步完成 (${cloudList.length} 篇)`;
-              document.getElementById("cloudStatus").style.background = "#e3f2fd";
-              refreshDisplay();
-            } else {
-              // 若雲端暫無文章，保留本機與預設文章，不予清空
-              if (!articlesList || articlesList.length === 0) articlesList = [...DEFAULT_ARTICLES];
-              document.getElementById("cloudStatus").innerText = "☁️ 雲端尚無文章 (已載入備份)";
-              document.getElementById("cloudStatus").style.background = "#fff8e1";
-              refreshDisplay();
-            }
-          }, error => {
-            console.warn(error);
-            document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
-            document.getElementById("cloudStatus").style.background = "#fff3e0";
-          });
-        } catch (err) {
+        db.collection("articles").onSnapshot(snapshot => {
+          const cloudList = [];
+          snapshot.forEach(doc => cloudList.push(doc.data()));
+          
+          if (cloudList.length > 0 || snapshot.empty) {
+            articlesList = cloudList;
+            saveLocalBackup(articlesList);
+            document.getElementById("cloudStatus").innerText = "☁️ 雲端同步完成";
+            document.getElementById("cloudStatus").style.background = "#e3f2fd";
+          }
+          refreshDisplay();
+        }, error => {
+          console.warn(error);
           document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
-        }
-      } else {
+          document.getElementById("cloudStatus").style.background = "#fff3e0";
+        });
+      } catch (err) {
         document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
       }
     });
 
     function refreshDisplay() {
-      if (!articlesList || articlesList.length === 0) {
-        articlesList = [...DEFAULT_ARTICLES];
-      }
-
       renderNav(document.getElementById("searchInput").value.trim());
+
+      if (articlesList.length === 0) {
+        currentArticleId = null;
+        document.getElementById("viewTitle").innerText = "👶 歡迎使用臨床工作手冊";
+        document.getElementById("viewPath").innerText = "📁 資料庫為空";
+        document.getElementById("viewText").innerHTML = "目前尚無內容。請點選右上角<b>「🔒 管理員登入」</b>後點選<b>「➕ 新增文章」</b>！";
+        document.getElementById("favBtn").style.display = "none";
+        document.getElementById("adminActions").style.display = "none";
+        return;
+      }
 
       if (currentArticleId) {
         const found = articlesList.find(a => a.id === currentArticleId);
         if (found) selectArticle(found.id);
         else selectArticle(articlesList[0].id);
-      } else if (articlesList.length > 0) {
+      } else {
         selectArticle(articlesList[0].id);
       }
     }
@@ -478,7 +415,7 @@
         "產房": ["待產照護", "產後照護"],
         "門診檢查": ["檢查流程", "衛教"]
       };
-      const combined = [...new Set([...(defaultMap[mainCat] || ["常規"]), ...existingSubCats])];
+      const combined = [...new Set([...(defaultMap[mainCat] || []), ...existingSubCats])];
       const datalist = document.getElementById("subCatList");
       datalist.innerHTML = "";
       combined.forEach(sc => {
@@ -495,19 +432,13 @@
       const navTree = document.getElementById("navTree");
       navTree.innerHTML = "";
 
-      if (!articlesList || articlesList.length === 0) {
+      if (articlesList.length === 0) {
         navTree.innerHTML = `<div style="padding:15px; color:#a08e8c; font-size:0.9em; text-align:center;">（無內容）</div>`;
         return;
       }
 
-      // 動態彙整所有可能的主分類（包含預設名稱與文章內自訂的名稱）
-      const defaultMainCats = ["病房", "嬰兒室", "新生兒加護病房 (NICU)", "產房", "門診檢查"];
-      const presentCats = articlesList.map(a => a.mainCategory || "未分類").filter(Boolean);
-      const mainCats = [...new Set([...defaultMainCats, ...presentCats])];
-
-      // 1. 我的最愛區塊
       const favArticles = articlesList.filter(a => favs.includes(a.id) && (
-        (a.title || "").toLowerCase().includes(filterKeyword.toLowerCase())
+        a.title.toLowerCase().includes(filterKeyword.toLowerCase())
       ));
 
       if (favArticles.length > 0) {
@@ -518,17 +449,17 @@
         favArticles.forEach(art => {
           const fileDiv = document.createElement("div");
           fileDiv.className = `file-item ${currentArticleId === art.id ? 'active' : ''}`;
-          fileDiv.innerHTML = `<span>📄 ${art.title || '無標題'}</span>`;
+          fileDiv.innerHTML = `<span>📄 ${art.title}</span>`;
           fileDiv.onclick = (e) => { e.stopPropagation(); selectArticle(art.id); };
           favDetails.appendChild(fileDiv);
         });
         navTree.appendChild(favDetails);
       }
 
-      // 2. 單位分類樹狀圖
+      const mainCats = ["病房", "嬰兒室", "新生兒加護病房 (NICU)", "產房", "門診檢查"];
       mainCats.forEach(mainCat => {
-        const mainArticles = articlesList.filter(a => (a.mainCategory || "未分類") === mainCat && (
-          (a.title || "").toLowerCase().includes(filterKeyword.toLowerCase())
+        const mainArticles = articlesList.filter(a => a.mainCategory === mainCat && (
+          a.title.toLowerCase().includes(filterKeyword.toLowerCase())
         ));
 
         if (mainArticles.length === 0) return;
@@ -551,7 +482,7 @@
             const isFav = favs.includes(art.id);
             const fileDiv = document.createElement("div");
             fileDiv.className = `file-item ${currentArticleId === art.id ? 'active' : ''}`;
-            fileDiv.innerHTML = `<span>📄 ${art.title || '無標題'}</span>${isFav ? '<span style="color:#f57f17;">⭐</span>' : ''}`;
+            fileDiv.innerHTML = `<span>📄 ${art.title}</span>${isFav ? '<span style="color:#f57f17;">⭐</span>' : ''}`;
             fileDiv.onclick = (e) => { e.stopPropagation(); selectArticle(art.id); };
             subDetails.appendChild(fileDiv);
           });
@@ -563,18 +494,12 @@
 
     function selectArticle(id) {
       currentArticleId = id;
-      let article = articlesList.find(a => a.id === id);
-      
-      // 安全備援：若指定 ID 找不到，直接拿第一篇
-      if (!article && articlesList.length > 0) {
-        article = articlesList[0];
-        currentArticleId = article.id;
-      }
+      const article = articlesList.find(a => a.id === id);
       if (!article) return;
 
-      document.getElementById("viewPath").innerText = `📂 ${article.mainCategory || '未分類'} ➔ 📁 ${article.subCategory || '一般常規'}`;
-      document.getElementById("viewTitle").innerText = article.title || '無標題';
-      document.getElementById("viewText").innerHTML = article.text || '<p>（無內容）</p>';
+      document.getElementById("viewPath").innerText = `📂 ${article.mainCategory} ➔ 📁 ${article.subCategory || '一般常規'}`;
+      document.getElementById("viewTitle").innerText = article.title;
+      document.getElementById("viewText").innerHTML = article.text;
 
       updateFavButtonUI();
       document.getElementById("adminActions").style.display = isAdmin ? "block" : "none";
@@ -632,17 +557,17 @@
       const article = articlesList.find(a => a.id === currentArticleId);
       if (!article) return;
       document.getElementById("formHeaderTitle").innerText = "✏️ 編輯文章";
-      document.getElementById("editMainCat").value = article.mainCategory || "病房";
+      document.getElementById("editMainCat").value = article.mainCategory;
       updateSubCatOptions();
       document.getElementById("editSubCat").value = article.subCategory || "常規";
-      document.getElementById("editTitle").value = article.title || "";
+      document.getElementById("editTitle").value = article.title;
       document.getElementById("editText").innerHTML = article.text || "";
       document.getElementById("article-view").style.display = "none";
       document.getElementById("edit-form").style.display = "block";
     }
 
     async function saveArticle() {
-      const mainCategory = document.getElementById("editMainCat").value.trim() || "病房";
+      const mainCategory = document.getElementById("editMainCat").value;
       const subCategory = document.getElementById("editSubCat").value.trim() || "一般常規";
       const title = document.getElementById("editTitle").value.trim();
       const text = document.getElementById("editText").innerHTML.trim();
@@ -655,9 +580,10 @@
       const docId = currentArticleId ? currentArticleId : "art_" + Date.now();
       const articleData = { id: docId, mainCategory, subCategory, title, text };
 
+      // 容量容量安全檢測 (Firebase 限 1MB，設定 850KB 安全預警)
       const dataSize = new Blob([JSON.stringify(articleData)]).size;
       if (dataSize > 850000) {
-        alert("⚠️ 文章圖片容量過大（已超過上限），請刪除部分照片或調整後重試！");
+        alert("⚠️ 文章圖片容量過大（已超過 Firebase 1MB 限制），無法寫入雲端！請刪除部分照片或調整後重試。");
         return;
       }
 
@@ -668,10 +594,10 @@
 
       try {
         if (db) await db.collection("articles").doc(docId).set(articleData);
-        alert("🎉 存檔成功！");
+        alert("🎉 存檔成功！已保留格式並同步寫入雲端。");
       } catch (error) {
         console.error(error);
-        alert("⚠️ 本地已備份，但雲端同步失敗：請確認 Firebase 安全規則。");
+        alert("⚠️ 本地已備份，但雲端寫入失敗：請確認 Firebase 安全規則或網路狀況。");
       }
 
       currentArticleId = docId;
