@@ -6,9 +6,9 @@
   <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
   <title>臨床護理工作手冊與病房分層目錄系統</title>
   
-  <!-- Firebase SDK 非同步載入加速首頁跳出 -->
-  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- Firebase SDK 穩定載入 -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
     :root {
@@ -90,7 +90,7 @@
     .article-title { font-size: 1.5em; color: #3a2e2d; flex: 1; font-weight: bold; }
     .article-path { font-size: 0.82em; color: var(--primary-color); font-weight: bold; margin-bottom: 12px; display: inline-block; background: var(--primary-light); padding: 5px 12px; border-radius: 12px; }
     .article-text { line-height: 1.85; color: #4a3e3d; font-size: 1.02em; }
-    img, video, iframe { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; }
+    img, video, iframe { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block; }
 
     #edit-form { display: none; }
     .form-group { margin-bottom: 18px; }
@@ -134,7 +134,7 @@
       <div class="top-left">
         <button class="btn menu-toggle-btn" onclick="toggleSidebar(true)">☰ 目錄</button>
         <span id="userStatus" class="status-badge">👁 唯讀模式</span>
-        <span id="cloudStatus" class="cloud-badge">☁️ 雲端同步中</span>
+        <span id="cloudStatus" class="cloud-badge">☁️ 雲端同步中...</span>
       </div>
       <div style="display:flex; gap:6px;">
         <button id="addBtn" class="btn btn-success" style="display:none;" onclick="showAddForm()">➕ 新增文章</button>
@@ -146,12 +146,12 @@
       <div id="article-view" class="article-card">
         <span id="viewPath" class="article-path">📁 資料庫</span>
         <div class="article-header">
-          <h1 id="viewTitle" class="article-title">讀取中...</h1>
+          <h1 id="viewTitle" class="article-title">載入中...</h1>
           <button id="favBtn" class="btn btn-fav" style="display:none;" onclick="toggleCurrentFavorite()">
             <span id="favIcon">☆</span> <span id="favText">收藏</span>
           </button>
         </div>
-        <div id="viewText" class="article-text">正在讀取資料，請稍候...</div>
+        <div id="viewText" class="article-text">正在讀取資料...</div>
         
         <div id="adminActions" style="margin-top:22px; display:none; border-top:2px dashed #fce8eb; padding-top:16px;">
           <button class="btn btn-primary" onclick="showEditForm()">✏️ 編輯本文</button>
@@ -185,7 +185,7 @@
         </div>
 
         <div class="form-group">
-          <label>文章內容（支援 Word 複製貼上）</label>
+          <label>文章內容（支援 Word 貼上與自動高壓照片）</label>
           <div class="editor-toolbar">
             <button type="button" class="tool-btn" style="background:#fff59d;" onclick="execCmd('hiliteColor', '#fff59d')">🟡 黃螢光</button>
             <button type="button" class="tool-btn" style="background:#a5d6a7;" onclick="execCmd('hiliteColor', '#a5d6a7')">🟢 綠螢光</button>
@@ -223,13 +223,23 @@
   </div>
 
   <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBUTVlgmao0XK11rY23VB-8vW79Q4kdiXo",
+      authDomain: "hospital-manual.firebaseapp.com",
+      databaseURL: "https://hospital-manual-default-rtdb.firebaseio.com",
+      projectId: "hospital-manual",
+      storageBucket: "hospital-manual.firebasestorage.app",
+      messagingSenderId: "519518026110",
+      appId: "1:519518026110:web:16eba951199edb7bbbdb2f"
+    };
+
     let db = null;
     const ADMIN_PASSWORD = "admin";
     let isAdmin = false;
     let currentArticleId = null;
     let articlesList = [];
 
-    // 極速圖片壓縮核心（限制 700px 寬度，品質 0.5 JPEG，檔案縮減 80%）
+    // 高度壓縮照片（寬度限制 500px，品質 0.4 JPEG，單張僅 30~50KB，避免 Firebase 1MB 限制）
     function compressAndInsertImage(file) {
       const reader = new FileReader();
       reader.onload = function(evt) {
@@ -238,7 +248,7 @@
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxWidth = 700; 
+          const maxWidth = 500; 
 
           if (width > maxWidth) {
             height = Math.round((height * maxWidth) / width);
@@ -251,7 +261,7 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.4);
           const imgHtml = `<img src="${compressedBase64}" style="max-width:100%; height:auto; border-radius:8px; margin:10px 0;">`;
           document.execCommand('insertHTML', false, imgHtml);
         };
@@ -295,42 +305,13 @@
     }
 
     function saveLocalBackup(list) {
-      // 異步寫入，防止主執行緒堵塞
-      setTimeout(() => {
-        try { localStorage.setItem("hospital_articles_backup_v1", JSON.stringify(list)); } catch(e){}
-      }, 0);
+      try { localStorage.setItem("hospital_articles_backup_v1", JSON.stringify(list)); } catch(e){}
     }
 
-    function initApp() {
-      const firebaseConfig = {
-        apiKey: "AIzaSyBUTVlgmao0XK11rY23VB-8vW79Q4kdiXo",
-        authDomain: "hospital-manual.firebaseapp.com",
-        databaseURL: "https://hospital-manual-default-rtdb.firebaseio.com",
-        projectId: "hospital-manual",
-        storageBucket: "hospital-manual.firebasestorage.app",
-        messagingSenderId: "519518026110",
-        appId: "1:519518026110:web:16eba951199edb7bbbdb2f"
-      };
-
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      db = firebase.firestore();
-
+    // 初始化：立即讀取本機快取出畫面，完全不需要等網絡！
+    window.addEventListener("DOMContentLoaded", () => {
       articlesList = loadLocalBackup();
       refreshDisplay();
-
-      db.collection("articles").onSnapshot(snapshot => {
-        const cloudList = [];
-        snapshot.forEach(doc => cloudList.push(doc.data()));
-        
-        if (cloudList.length > 0 || snapshot.empty) {
-          articlesList = cloudList;
-          saveLocalBackup(articlesList);
-          document.getElementById("cloudStatus").innerText = "☁️ 雲端同步成功";
-        }
-        refreshDisplay();
-      }, error => {
-        document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
-      });
 
       const editor = document.getElementById('editText');
       if (editor) {
@@ -344,7 +325,32 @@
           }
         });
       }
-    }
+
+      // 連線 Firebase 雲端
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+
+        db.collection("articles").onSnapshot(snapshot => {
+          const cloudList = [];
+          snapshot.forEach(doc => cloudList.push(doc.data()));
+          
+          if (cloudList.length > 0 || snapshot.empty) {
+            articlesList = cloudList;
+            saveLocalBackup(articlesList);
+            document.getElementById("cloudStatus").innerText = "☁️ 雲端同步完成";
+            document.getElementById("cloudStatus").style.background = "#e3f2fd";
+          }
+          refreshDisplay();
+        }, error => {
+          console.warn(error);
+          document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
+          document.getElementById("cloudStatus").style.background = "#fff3e0";
+        });
+      } catch (err) {
+        document.getElementById("cloudStatus").innerText = "💾 本地離線模式";
+      }
+    });
 
     function refreshDisplay() {
       renderNav(document.getElementById("searchInput").value.trim());
@@ -353,7 +359,7 @@
         currentArticleId = null;
         document.getElementById("viewTitle").innerText = "👶 歡迎使用臨床工作手冊";
         document.getElementById("viewPath").innerText = "📁 資料庫為空";
-        document.getElementById("viewText").innerHTML = "目前尚無內容。請登入管理員新增文章。";
+        document.getElementById("viewText").innerHTML = "目前尚無內容。請點選右上角<b>「🔒 管理員登入」</b>後點選<b>「➕ 新增文章」</b>！";
         document.getElementById("favBtn").style.display = "none";
         document.getElementById("adminActions").style.display = "none";
         return;
@@ -574,16 +580,24 @@
       const docId = currentArticleId ? currentArticleId : "art_" + Date.now();
       const articleData = { id: docId, mainCategory, subCategory, title, text };
 
+      // 容量容量安全檢測 (Firebase 限 1MB，設定 850KB 安全預警)
+      const dataSize = new Blob([JSON.stringify(articleData)]).size;
+      if (dataSize > 850000) {
+        alert("⚠️ 文章圖片容量過大（已超過 Firebase 1MB 限制），無法寫入雲端！請刪除部分照片或調整後重試。");
+        return;
+      }
+
       const index = articlesList.findIndex(a => a.id === docId);
       if (index >= 0) articlesList[index] = articleData;
       else articlesList.push(articleData);
       saveLocalBackup(articlesList);
 
       try {
-        await db.collection("articles").doc(docId).set(articleData);
-        alert("🎉 存檔成功！");
+        if (db) await db.collection("articles").doc(docId).set(articleData);
+        alert("🎉 存檔成功！已保留格式並同步寫入雲端。");
       } catch (error) {
-        alert("⚠️ 本地已儲存，雲端同步受阻請檢查 Firebase 限制。");
+        console.error(error);
+        alert("⚠️ 本地已備份，但雲端寫入失敗：請確認 Firebase 安全規則或網路狀況。");
       }
 
       currentArticleId = docId;
@@ -607,15 +621,13 @@
       saveLocalBackup(articlesList);
 
       try {
-        await db.collection("articles").doc(targetId).delete();
+        if (db) await db.collection("articles").doc(targetId).delete();
         alert("🗑️ 文章已刪除！");
       } catch (error) {}
 
       currentArticleId = null;
       refreshDisplay();
     }
-
-    window.addEventListener("DOMContentLoaded", initApp);
   </script>
 </body>
 </html>
